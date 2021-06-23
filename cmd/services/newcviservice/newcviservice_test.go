@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
 	filters "github.com/diadata-org/diadata/internal/pkg/filtersOptionService"
+	"github.com/diadata-org/diadata/pkg/dia"
+	"sort"
 	"testing"
 )
 
@@ -14,6 +17,14 @@ func TestCalculateMidAndDifference(t *testing.T) {
 	if 23.200000000000003 != near[1940].Difference {
 		t.Error("Diff is", near[1940].Difference)
 	}
+
+	next := CalculateMidAndDifference(getNextTermTestData())
+
+
+
+	if 2.400000000000002 != next[1960].Difference {
+		t.Error("Diff is", next[1960].Difference)
+	}
 }
 
 //strike price at which the absolute difference between the call and put
@@ -22,33 +33,191 @@ func TestMinimim(t *testing.T) {
 	near := CalculateMidAndDifference(getNearTermTestData())
 	minimum := FindMinimumMid(near)
 	if 1965 != minimum {
-		t.Error(" minimum", minimum)
+		t.Error(" Error on Finding Minimum ", minimum)
+	}
+}
+
+func TestMinimim2(t *testing.T) {
+	next := CalculateMidAndDifference(getNextTermTestData())
+	minimum := FindMinimumMid(next)
+	if 1960 != minimum {
+		t.Error(" Error on Finding Minimum ", minimum)
 	}
 }
 
 func TestForward(t *testing.T) {
 	near := CalculateMidAndDifference(getNearTermTestData())
 	minimum := FindMinimumMid(near)
-	forward := filters.CalculateForwardIndex(near[minimum].StrikePrice, 0.000305,  0.0683486, near[minimum].CallMid, near[minimum].PutMid)
+	forward := filters.CalculateForwardIndex(near[minimum].StrikePrice, 0.000305, 0.0683486, near[minimum].CallMid, near[minimum].PutMid)
 	if 1962.8999562222655 != forward {
-		t.Error("Forward ", forward)
+		t.Error("Error on calculation of forward ", forward)
+	}
+}
+func TestForward2(t *testing.T) {
+	next := CalculateMidAndDifference(getNextTermTestData())
+	minimum := FindMinimumMid(next)
+	forward := filters.CalculateForwardIndex(next[minimum].StrikePrice, 0.000286, 0.0882686, next[minimum].CallMid, next[minimum].PutMid)
+	if 1962.4000605883318 != forward {
+		t.Error("Error on TestForward2 ", forward)
 	}
 }
 
-func TestFindk1(t *testing.T){
+func TestFindk1(t *testing.T) {
 	var nearstrikePrices []float64
 
 	near := CalculateMidAndDifference(getNearTermTestData())
 	minimum := FindMinimumMid(near)
-	forward := filters.CalculateForwardIndex(near[minimum].StrikePrice, 0.000305,  0.0683486, near[minimum].CallMid, near[minimum].PutMid)
-	 for sp,_ := range near{
-		 nearstrikePrices = append(nearstrikePrices,sp)
-	 }
-
-	 k1 := findK1(nearstrikePrices,forward)
-	if 1960 != k1 {
-		t.Error("k1 ", k1)
+	forward := filters.CalculateForwardIndex(near[minimum].StrikePrice, 0.000305, 0.0683486, near[minimum].CallMid, near[minimum].PutMid)
+	for sp, _ := range near {
+		nearstrikePrices = append(nearstrikePrices, sp)
 	}
+
+	log.Debug("nearstrikePrices",nearstrikePrices)
+	k1 := findK1(nearstrikePrices, forward)
+	if 1960 != k1 {
+		t.Error("Error on calculation of k  ", k1)
+	}
+
+}
+
+func TestFindk2(t *testing.T) {
+	var nextstrikePrices []float64
+
+	next := CalculateMidAndDifference(getNextTermTestData())
+	minimum := FindMinimumMid(next)
+	forward := filters.CalculateForwardIndex(next[minimum].StrikePrice, 0.000286, 0.0882686, next[minimum].CallMid, next[minimum].PutMid)
+	for sp, _ := range next {
+		nextstrikePrices = append(nextstrikePrices, sp)
+	}
+
+	log.Debug("nextstrikePrices",nextstrikePrices)
+	k2 := findK2(nextstrikePrices, forward)
+	if 1960 != k2 {
+		t.Error("Error on calculation of k2  ", k2)
+	}
+
+}
+
+func TestFindOTM(t *testing.T) {
+	var nearstrikePrices []float64
+	var strikePrices []float64
+
+	near := CalculateMidAndDifference(getNearTermTestData())
+	minimum := FindMinimumMid(near)
+	forward := filters.CalculateForwardIndex(near[minimum].StrikePrice, 0.000305, 0.0683486, near[minimum].CallMid, near[minimum].PutMid)
+	for sp, _ := range near {
+		nearstrikePrices = append(nearstrikePrices, sp)
+	}
+
+	k1 := findK1(nearstrikePrices, forward)
+
+	for sp, _ := range near {
+		strikePrices = append(strikePrices, sp)
+	}
+
+	optionTableCombined := testCreateoptionTableCombined(near)
+
+	nearTermOTM := calculateOTMCall(strikePrices, optionTableCombined, k1)
+
+	nearTermOTMTemp := calculateOTMPut(strikePrices, optionTableCombined, k1)
+	for k, v := range nearTermOTMTemp {
+		nearTermOTM[k] = v
+	}
+
+	//TODO delibirately add missing
+	strp := fmt.Sprintf("%f", k1)
+
+	nearTermOTM[k1] = optionTableCombined[strp+"-P"]
+
+	//ans := CalculateSigmaCallPut(near[1960],0.000305, 0.0683486)
+
+	nearTermOTM = fillDeltaK(nearTermOTM)
+
+	nearTermOTM = fillContributionByStrike(nearTermOTM,strikePrices,0.000305, 0.0683486,k1)
+
+
+
+	var nearTermOTMSP []float64
+
+	for sp, _ := range nearTermOTM {
+		nearTermOTMSP = append(nearTermOTMSP, sp)
+	}
+	sort.Float64s(nearTermOTMSP)
+	//for _,key := range nearTermOTMSP{
+	//	v := nearTermOTM[key]
+	//	fmt.Printf("Strike Price %v - ContributionByStrike %v  Type %v StrikePrice %v  deltak %v\n ",key,v.ContributionByStrike,v.Type,v.StrikePrice,v.DeltaK)
+	//}
+
+	if 5.328045428846959e-07 != nearTermOTM[1370].ContributionByStrike {
+		t.Error("nearTermOTM ", nearTermOTM[1370].ContributionByStrike)
+	}
+	if 3.305854038149706e-07 != nearTermOTM[1375].ContributionByStrike {
+		t.Error("nearTermOTM ", nearTermOTM[1375].ContributionByStrike)
+	}
+	if 3.938330366021921e-07 != nearTermOTM[1380].ContributionByStrike {
+		t.Error("nearTermOTM ", nearTermOTM[1380].ContributionByStrike)
+	}
+	if 2.399787041335992e-05 != nearTermOTM[1950].ContributionByStrike {
+		t.Error("nearTermOTM ", nearTermOTM[1950].ContributionByStrike)
+	}
+
+	if 2.5837627591617855e-05 != nearTermOTM[1955].ContributionByStrike {
+		t.Error("nearTermOTM ", nearTermOTM[1955].ContributionByStrike)
+	}
+	if 2.7258757026167887e-05 != nearTermOTM[1965].ContributionByStrike {
+		t.Error("nearTermOTM ", nearTermOTM[1965].ContributionByStrike)
+	}
+
+	if 2.3319819271791563e-05 != nearTermOTM[1970].ContributionByStrike {
+		t.Error("nearTermOTM ", nearTermOTM[1970].ContributionByStrike)
+	}
+
+	if 2.3319819271791563e-05 != nearTermOTM[2095].ContributionByStrike {
+		t.Error("nearTermOTM ", nearTermOTM[2095].ContributionByStrike)
+	}
+
+	if 2.3319819271791563e-05 != nearTermOTM[2100].ContributionByStrike {
+		t.Error("nearTermOTM 2100", nearTermOTM[2100].ContributionByStrike)
+	}
+
+	if 2.3319819271791563e-05 != nearTermOTM[2125].ContributionByStrike {
+		t.Error("nearTermOTM 2125 ", nearTermOTM[2125].ContributionByStrike)
+		t.Error("nearTermOTM 2125 mid ", nearTermOTM[2125].CallMid)
+
+	}
+
+
+
+	// 2095
+
+
+	addAll := 0.0
+
+	//for _,cbs := range nearTermOTM{
+	//	fmt.Print("cbs DeltaK ",cbs.DeltaK)
+	//	fmt.Println("   StrikePrice",cbs.StrikePrice)
+	//
+	//	addAll = addAll + cbs.ContributionByStrike
+	//}
+
+
+	if 2.3319819271791563e-05 != addAll {
+		t.Error("Additon od all contribution ", addAll)
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 }
 
@@ -135,6 +304,7 @@ func getNearTermTestData() map[float64]OptionsTable {
 	testData[1600] = OptionsTable{CallBid: 361.60, CallAsk: 365.20, PutBid: 0.50, PutAsk: 0.85}
 	testData[1605] = OptionsTable{CallBid: 356.60, CallAsk: 360.30, PutBid: 0.30, PutAsk: 0.85}
 	testData[1610] = OptionsTable{CallBid: 351.60, CallAsk: 355.30, PutBid: 0.35, PutAsk: 0.90}
+	testData[1615] = OptionsTable{CallBid: 346.70, CallAsk: 350.30, PutBid: 0.35, PutAsk: 0.90}
 	testData[1620] = OptionsTable{CallBid: 341.70, CallAsk: 345.30, PutBid: 0.35, PutAsk: 0.90}
 	testData[1625] = OptionsTable{CallBid: 336.70, CallAsk: 340.40, PutBid: 0.40, PutAsk: 0.95}
 	testData[1630] = OptionsTable{CallBid: 331.70, CallAsk: 335.40, PutBid: 0.40, PutAsk: 0.95}
@@ -209,41 +379,54 @@ func getNearTermTestData() map[float64]OptionsTable {
 	testData[1965] = OptionsTable{CallBid: 20.30, CallAsk: 21.80, PutBid: 22.30, PutAsk: 24.00}
 	testData[1970] = OptionsTable{CallBid: 17.40, CallAsk: 18.80, PutBid: 24.30, PutAsk: 25.80}
 	testData[1975] = OptionsTable{CallBid: 14.60, CallAsk: 15.90, PutBid: 26.50, PutAsk: 28.10}
-
-	//1975 14.60 15.90 26.50 28.10
-	//1980 12.20 13.30 28.90 30.60
-	//1985 9.90 11.00 31.40 33.20
-	//1990 7.90 9.00 34.30 36.50
-	//1995 6.20 7.10 37.40 39.70
-	//2000 4.70 5.20 40.70 43.20
-	//2005 3.40 4.20 44.00 47.70
-	//2010 2.65 3.10 48.00 51.40
-	//2015 1.75 2.30 52.20 56.00
-	//2020 1.20 1.70 56.60 60.40
-	//2025 1.00 1.25 61.20 65.00
-	//2030 0.45 1.00 65.90 69.70
-	//2035 0.25 0.80 70.70 74.40
-	//2040 0.35 0.65 75.60 79.30
-	//2045 0.20 0.60 80.50 84.10
-	//2050 0.20 0.30 85.40 89.00
-	//2055 0.15 0.50 90.40 94.00
-	//2060 0.15 0.30 95.30 98.90
-	//2065 0.15 0.20 100.30 103.90
-	//2070 0.10 0.20 105.30 108.90
-	//2075 0.10 0.20 110.30 113.80
-	//2080 0.05 0.45 115.30 118.80
-	//2085 0.05 0.40 120.30 123.80
-	//2090 0.05 0.15 125.30 128.80
-	//2095 0.05 0.35 130.30 133.80
-	//2100 0.05 0.15 135.30 138.80
-	//2120 0.00 0.15 155.30 158.80
-	//2125 0.05 0.15 160.30 163.80
-	//2150 0.00 0.10 185.20 188.80
-	//2175 0.00 0.05 210.20 213.70
-	//2200 0.00 0.05 235.20 238.70
-	//2225 0.05 0.10 260.20 263.70
-	//2250 0.00 0.05 285.20 288.70
-
+	testData[1980] = OptionsTable{CallBid: 12.20, CallAsk: 13.30, PutBid: 28.90, PutAsk: 30.60}
+	testData[1985] = OptionsTable{CallBid: 9.90, CallAsk: 11.00, PutBid: 31.40, PutAsk: 33.20}
+	testData[1990] = OptionsTable{CallBid: 7.90, CallAsk: 9.00, PutBid: 34.30, PutAsk: 36.50}
+	testData[1995] = OptionsTable{CallBid: 6.20, CallAsk: 7.10, PutBid: 37.40, PutAsk: 39.70}
+	testData[2000] = OptionsTable{CallBid: 4.70, CallAsk: 5.20, PutBid: 40.70, PutAsk: 43.20}
+	testData[2005] = OptionsTable{CallBid: 3.40, CallAsk: 4.20, PutBid: 44.00, PutAsk: 47.70}
+	testData[2010] = OptionsTable{CallBid: 2.65, CallAsk: 3.10, PutBid: 48.00, PutAsk: 51.40}
+	testData[2015] = OptionsTable{CallBid: 1.75, CallAsk: 2.30, PutBid: 52.20, PutAsk: 56.00}
+	testData[2020] = OptionsTable{CallBid: 1.20, CallAsk: 1.70, PutBid: 56.60, PutAsk: 60.40}
+	testData[2025] = OptionsTable{CallBid: 1.00, CallAsk: 1.25, PutBid: 61.20, PutAsk: 65.00}
+	testData[2030] = OptionsTable{CallBid: 0.45, CallAsk: 1.00, PutBid: 65.90, PutAsk: 69.70}
+	testData[2035] = OptionsTable{CallBid: 0.25, CallAsk: 0.80, PutBid: 70.70, PutAsk: 74.40}
+	testData[2040] = OptionsTable{CallBid: 0.35, CallAsk: 0.65, PutBid: 75.60, PutAsk: 79.30}
+	testData[2045] = OptionsTable{CallBid: 0.20, CallAsk: 0.60, PutBid: 80.50, PutAsk: 84.10}
+	testData[2050] = OptionsTable{CallBid: 0.20, CallAsk: 0.30, PutBid: 85.40, PutAsk: 89.00}
+	testData[2055] = OptionsTable{CallBid: 0.15, CallAsk: 0.50, PutBid: 90.40, PutAsk: 94.00}
+	testData[2060] = OptionsTable{CallBid: 0.15, CallAsk: 0.30, PutBid: 95.30, PutAsk: 98.90}
+	testData[2065] = OptionsTable{CallBid: 0.15, CallAsk: 0.20, PutBid: 100.30, PutAsk: 103.90}
+	testData[2070] = OptionsTable{CallBid: 0.10, CallAsk: 0.20, PutBid: 105.30, PutAsk: 108.90}
+	testData[2075] = OptionsTable{CallBid: 0.10, CallAsk: 0.20, PutBid: 110.30, PutAsk: 113.80}
+	testData[2080] = OptionsTable{CallBid: 0.05, CallAsk: 0.45, PutBid: 115.30, PutAsk: 118.80}
+	testData[2085] = OptionsTable{CallBid: 0.05, CallAsk: 0.40, PutBid: 120.30, PutAsk: 123.80}
+	testData[2090] = OptionsTable{CallBid: 0.05, CallAsk: 0.15, PutBid: 125.30, PutAsk: 128.80}
+	testData[2095] = OptionsTable{CallBid: 0.05, CallAsk: 0.35, PutBid: 130.30, PutAsk: 133.80}
+	testData[2100] = OptionsTable{CallBid: 0.05, CallAsk: 0.15, PutBid: 135.30, PutAsk: 138.80}
+	testData[2120] = OptionsTable{CallBid: 0.00, CallAsk: 0.15, PutBid: 155.30, PutAsk: 158.80}
+	testData[2125] = OptionsTable{CallBid: 0.05, CallAsk: 0.15, PutBid: 160.30, PutAsk: 163.80}
+	testData[2150] = OptionsTable{CallBid: 0.00, CallAsk: 0.10, PutBid: 185.20, PutAsk: 188.80}
+	testData[2175] = OptionsTable{CallBid: 0.00, CallAsk: 0.05, PutBid: 210.20, PutAsk: 213.70}
+	testData[2200] = OptionsTable{CallBid: 0.00, CallAsk: 0.05, PutBid: 235.20, PutAsk: 238.70}
+	testData[2225] = OptionsTable{CallBid: 0.05, CallAsk: 0.10, PutBid: 260.20, PutAsk: 263.70}
+	testData[2250] = OptionsTable{CallBid: 0.00, CallAsk: 0.05, PutBid: 285.20, PutAsk: 288.70}
 	return testData
 
+}
+
+func testCreateoptionTableCombined(planeot map[float64]OptionsTable) map[string]OptionsTable {
+	var optionTableCombined map[string]OptionsTable
+	optionTableCombined = make(map[string]OptionsTable)
+	for i, v := range planeot {
+		strike := fmt.Sprintf("%f", i)
+		v.Type = dia.CallOption
+		optionTableCombined[strike+"-C"] = v
+	}
+	for i, v := range planeot {
+		strike := fmt.Sprintf("%f", i)
+		v.Type = dia.PutOption
+		optionTableCombined[strike+"-P"] = v
+	}
+	return optionTableCombined
 }

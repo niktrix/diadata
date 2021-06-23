@@ -91,7 +91,7 @@ func remainingMinutesForUpto(settlementTime time.Time) float64 {
 
 func CalculateForwardIndex(strikePrice,roi,time,callprice,putprice float64) float64{
 
- 	return strikePrice + math.Exp(roi*time)*(callprice-putprice)
+ 	return strikePrice + (math.Exp(roi*time))*(callprice-putprice)
 
 
 
